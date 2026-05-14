@@ -1,0 +1,377 @@
+name: OpenWrt Build JIDU6101
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses5-dev \
+            libssl-dev python3-distutils rsync unzip zlib1g-dev \
+            file wget qemu-utils
+
+      - name: Fetch PR 22201 (JIDU6101 Support)
+        run: |
+          git fetch origin pull/22201/head:pr-22201
+          git cherry-pick pr-22201
+
+      - name: Update Feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Remove Broken Packages
+        run: |
+          ./scripts/feeds uninstall onionshare-cli || true
+
+      - name: Add Config
+        run: |
+          cat > .config << 'EOF'
+          # Target
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_mediatek_filogic_DEVICE_jiorouter_ax6000-jidu6101=y
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_TARGET_ROOTFS_EXT4FS=y
+CONFIG_PACKAGE_base-files=y
+CONFIG_PACKAGE_block-mount=y
+CONFIG_PACKAGE_blockd=y
+CONFIG_PACKAGE_busybox=y
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_cgi-io=y
+CONFIG_PACKAGE_dnsmasq=y
+CONFIG_PACKAGE_dropbear=y
+CONFIG_PACKAGE_e2fsprogs=y
+CONFIG_PACKAGE_eip197-mini-firmware=y
+CONFIG_PACKAGE_f2fsck=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_fit-check-sign=y
+CONFIG_PACKAGE_fitblk=y
+CONFIG_PACKAGE_fstools=y
+CONFIG_PACKAGE_fwtool=y
+CONFIG_PACKAGE_getrandom=y
+CONFIG_PACKAGE_hostapd-common=y
+CONFIG_PACKAGE_ip-tiny=y
+CONFIG_PACKAGE_ip6tables-nft=y
+CONFIG_PACKAGE_iperf3=y
+CONFIG_PACKAGE_ipset=y
+CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
+CONFIG_PACKAGE_iptables-mod-extra=y
+CONFIG_PACKAGE_iptables-mod-ipopt=y
+CONFIG_PACKAGE_iptables-nft=y
+CONFIG_PACKAGE_iw=y
+CONFIG_PACKAGE_jansson4=y
+CONFIG_PACKAGE_jshn=y
+CONFIG_PACKAGE_jsonfilter=y
+CONFIG_PACKAGE_logd=y
+CONFIG_PACKAGE_mkf2fs=y
+CONFIG_PACKAGE_mount-utils=y
+CONFIG_PACKAGE_mt7986-wo-firmware=y
+CONFIG_PACKAGE_mtd=y
+CONFIG_PACKAGE_mwan3=y
+CONFIG_PACKAGE_nano=y
+CONFIG_PACKAGE_netifd=y
+CONFIG_PACKAGE_nftables-json=y
+CONFIG_PACKAGE_nlbwmon=y
+CONFIG_PACKAGE_odhcp6c=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+CONFIG_PACKAGE_openssl-util=y
+CONFIG_PACKAGE_openwrt-keyring=y
+CONFIG_PACKAGE_ppp=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+CONFIG_PACKAGE_procd=y
+CONFIG_PACKAGE_procd-seccomp=y
+CONFIG_PACKAGE_procd-ujail=y
+CONFIG_PACKAGE_px5g-mbedtls=y
+CONFIG_PACKAGE_r8152-firmware=y
+CONFIG_PACKAGE_resolveip=y
+CONFIG_PACKAGE_rpcd=y
+CONFIG_PACKAGE_rpcd-mod-file=y
+CONFIG_PACKAGE_rpcd-mod-iwinfo=y
+CONFIG_PACKAGE_rpcd-mod-luci=y
+CONFIG_PACKAGE_rpcd-mod-rpcsys=y
+CONFIG_PACKAGE_rpcd-mod-rrdns=y
+CONFIG_PACKAGE_rpcd-mod-ucode=y
+CONFIG_PACKAGE_sqm-scripts=y
+CONFIG_PACKAGE_6in4=y
+CONFIG_PACKAGE_6rd=y
+CONFIG_PACKAGE_tc-tiny=y
+CONFIG_PACKAGE_terminfo=y
+CONFIG_PACKAGE_ubi-utils=y
+CONFIG_PACKAGE_uboot-envtools=y
+CONFIG_PACKAGE_ubox=y
+CONFIG_PACKAGE_ubus=y
+CONFIG_PACKAGE_ubusd=y
+CONFIG_PACKAGE_uci=y
+CONFIG_PACKAGE_uclient-fetch=y
+CONFIG_PACKAGE_ucode=y
+CONFIG_PACKAGE_ucode-mod-digest=y
+CONFIG_PACKAGE_ucode-mod-fs=y
+CONFIG_PACKAGE_ucode-mod-html=y
+CONFIG_PACKAGE_ucode-mod-log=y
+CONFIG_PACKAGE_ucode-mod-math=y
+CONFIG_PACKAGE_ucode-mod-nl80211=y
+CONFIG_PACKAGE_ucode-mod-rtnl=y
+CONFIG_PACKAGE_ucode-mod-ubus=y
+CONFIG_PACKAGE_ucode-mod-uci=y
+CONFIG_PACKAGE_ucode-mod-uloop=y
+CONFIG_PACKAGE_uhttpd=y
+CONFIG_PACKAGE_uhttpd-mod-ubus=y
+CONFIG_PACKAGE_urandom-seed=y
+CONFIG_PACKAGE_urngd=y
+CONFIG_PACKAGE_usign=y
+CONFIG_PACKAGE_vnstat2=y
+CONFIG_PACKAGE_vnstati2=y
+CONFIG_PACKAGE_wifi-scripts=y
+CONFIG_PACKAGE_wireguard-tools=y
+CONFIG_PACKAGE_wireless-regdb=y
+CONFIG_PACKAGE_wpad-openssl=y
+CONFIG_PACKAGE_xtables-nft=y
+CONFIG_PACKAGE_zlib=y
+CONFIG_PACKAGE_zram-swap=y
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-app-mwan3=y
+CONFIG_PACKAGE_luci-app-nlbwmon=y
+CONFIG_PACKAGE_luci-app-opkg=y
+CONFIG_PACKAGE_luci-app-sqm=y
+CONFIG_PACKAGE_luci-app-vnstat2=y
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_luci-lib-chartjs=y
+CONFIG_PACKAGE_luci-lib-jsonc=y
+CONFIG_PACKAGE_luci-lib-uqr=y
+CONFIG_PACKAGE_luci-mod-admin-full=y
+CONFIG_PACKAGE_luci-mod-network=y
+CONFIG_PACKAGE_luci-mod-status=y
+CONFIG_PACKAGE_luci-mod-system=y
+CONFIG_PACKAGE_luci-proto-ipv6=y
+CONFIG_PACKAGE_luci-proto-ppp=y
+CONFIG_PACKAGE_luci-proto-wireguard=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_kmod-br-netfilter=y
+CONFIG_PACKAGE_kmod-cfg80211=y
+CONFIG_PACKAGE_kmod-crypto-acompress=y
+CONFIG_PACKAGE_kmod-crypto-aead=y
+CONFIG_PACKAGE_kmod-crypto-authenc=y
+CONFIG_PACKAGE_kmod-crypto-blake2b=y
+CONFIG_PACKAGE_kmod-crypto-ccm=y
+CONFIG_PACKAGE_kmod-crypto-cmac=y
+CONFIG_PACKAGE_kmod-crypto-crc32c=y
+CONFIG_PACKAGE_kmod-crypto-ctr=y
+CONFIG_PACKAGE_kmod-crypto-des=y
+CONFIG_PACKAGE_kmod-crypto-gcm=y
+CONFIG_PACKAGE_kmod-crypto-geniv=y
+CONFIG_PACKAGE_kmod-crypto-gf128=y
+CONFIG_PACKAGE_kmod-crypto-ghash=y
+CONFIG_PACKAGE_kmod-crypto-hash=y
+CONFIG_PACKAGE_kmod-crypto-hmac=y
+CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y
+CONFIG_PACKAGE_kmod-crypto-kpp=y
+CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
+CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
+CONFIG_PACKAGE_kmod-crypto-lib-curve25519=y
+CONFIG_PACKAGE_kmod-crypto-lib-poly1305=y
+CONFIG_PACKAGE_kmod-crypto-manager=y
+CONFIG_PACKAGE_kmod-crypto-md5=y
+CONFIG_PACKAGE_kmod-crypto-null=y
+CONFIG_PACKAGE_kmod-crypto-rng=y
+CONFIG_PACKAGE_kmod-crypto-seqiv=y
+CONFIG_PACKAGE_kmod-crypto-sha1=y
+CONFIG_PACKAGE_kmod-crypto-sha256=y
+CONFIG_PACKAGE_kmod-crypto-sha3=y
+CONFIG_PACKAGE_kmod-crypto-sha512=y
+CONFIG_PACKAGE_kmod-crypto-xxhash=y
+CONFIG_PACKAGE_kmod-fs-autofs4=y
+CONFIG_PACKAGE_kmod-fs-btrfs=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-fs-ntfs3=y
+CONFIG_PACKAGE_kmod-fou=y
+CONFIG_PACKAGE_kmod-fou6=y
+CONFIG_PACKAGE_kmod-geneve=y
+CONFIG_PACKAGE_kmod-gre=y
+CONFIG_PACKAGE_kmod-gre6=y
+CONFIG_PACKAGE_kmod-gpio-button-hotplug=y
+CONFIG_PACKAGE_kmod-hwmon-core=y
+CONFIG_PACKAGE_kmod-i2c-core=y
+CONFIG_PACKAGE_kmod-ifb=y
+CONFIG_PACKAGE_kmod-input-core=y
+CONFIG_PACKAGE_kmod-ip6-tunnel=y
+CONFIG_PACKAGE_kmod-ip6tables=y
+CONFIG_PACKAGE_kmod-ipt-conntrack=y
+CONFIG_PACKAGE_kmod-ipt-conntrack-extra=y
+CONFIG_PACKAGE_kmod-ipt-core=y
+CONFIG_PACKAGE_kmod-ipt-extra=y
+CONFIG_PACKAGE_kmod-ipt-ipopt=y
+CONFIG_PACKAGE_kmod-ipt-ipset=y
+CONFIG_PACKAGE_kmod-ipt-nat=y
+CONFIG_PACKAGE_kmod-ipt-nat-extra=y
+CONFIG_PACKAGE_kmod-ipt-nat6=y
+CONFIG_PACKAGE_kmod-ipt-physdev=y
+CONFIG_PACKAGE_kmod-iptunnel=y
+CONFIG_PACKAGE_kmod-iptunnel4=y
+CONFIG_PACKAGE_kmod-iptunnel6=y
+CONFIG_PACKAGE_kmod-leds-gpio=y
+CONFIG_PACKAGE_kmod-leds-pwm=y
+CONFIG_PACKAGE_kmod-ledtrig-gpio=y
+CONFIG_PACKAGE_kmod-lib-crc-ccitt=y
+CONFIG_PACKAGE_kmod-lib-crc16=y
+CONFIG_PACKAGE_kmod-lib-crc32c=y
+CONFIG_PACKAGE_kmod-lib-lz4=y
+CONFIG_PACKAGE_kmod-lib-lz4-decompress=y
+CONFIG_PACKAGE_kmod-lib-lzo=y
+CONFIG_PACKAGE_kmod-lib-raid6=y
+CONFIG_PACKAGE_kmod-lib-xor=y
+CONFIG_PACKAGE_kmod-lib-xxhash=y
+CONFIG_PACKAGE_kmod-lib-zlib-deflate=y
+CONFIG_PACKAGE_kmod-lib-zlib-inflate=y
+CONFIG_PACKAGE_kmod-lib-zstd=y
+CONFIG_PACKAGE_kmod-libphy=y
+CONFIG_PACKAGE_kmod-mac80211=y
+CONFIG_PACKAGE_kmod-macvlan=y
+CONFIG_PACKAGE_kmod-mii=y
+CONFIG_PACKAGE_kmod-mpls=y
+CONFIG_PACKAGE_kmod-mt76=y
+CONFIG_PACKAGE_kmod-mt76-connac=y
+CONFIG_PACKAGE_kmod-mt76-core=y
+CONFIG_PACKAGE_kmod-mt7603=y
+CONFIG_PACKAGE_kmod-mt76x02-common=y
+CONFIG_PACKAGE_kmod-mt76x2=y
+CONFIG_PACKAGE_kmod-mt76x2-common=y
+CONFIG_PACKAGE_kmod-mt7915e=y
+CONFIG_PACKAGE_kmod-mt7916-firmware=y
+CONFIG_PACKAGE_kmod-mt7986-firmware=y
+CONFIG_PACKAGE_kmod-nat46=y
+CONFIG_PACKAGE_kmod-nf-conncount=y
+CONFIG_PACKAGE_kmod-nf-conntrack=y
+CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
+CONFIG_PACKAGE_kmod-nf-conntrack6=y
+CONFIG_PACKAGE_kmod-nf-flow=y
+CONFIG_PACKAGE_kmod-nf-ipt=y
+CONFIG_PACKAGE_kmod-nf-ipt6=y
+CONFIG_PACKAGE_kmod-nf-ipvs=y
+CONFIG_PACKAGE_kmod-nf-log=y
+CONFIG_PACKAGE_kmod-nf-log6=y
+CONFIG_PACKAGE_kmod-nf-nat=y
+CONFIG_PACKAGE_kmod-nf-nat6=y
+CONFIG_PACKAGE_kmod-nf-reject=y
+CONFIG_PACKAGE_kmod-nf-reject6=y
+CONFIG_PACKAGE_kmod-nfnetlink=y
+CONFIG_PACKAGE_kmod-nfnetlink-queue=y
+CONFIG_PACKAGE_kmod-nft-compat=y
+CONFIG_PACKAGE_kmod-nft-core=y
+CONFIG_PACKAGE_kmod-nft-fib=y
+CONFIG_PACKAGE_kmod-nft-nat=y
+CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_kmod-nft-queue=y
+CONFIG_PACKAGE_kmod-nls-base=y
+CONFIG_PACKAGE_kmod-nsh=y
+CONFIG_PACKAGE_kmod-ppp=y
+CONFIG_PACKAGE_kmod-pppoe=y
+CONFIG_PACKAGE_kmod-pppox=y
+CONFIG_PACKAGE_kmod-sched-act-sample=y
+CONFIG_PACKAGE_kmod-sched-act-vlan=y
+CONFIG_PACKAGE_kmod-sched-bpf=y
+CONFIG_PACKAGE_kmod-sched-cake=y
+CONFIG_PACKAGE_kmod-sched-connmark=y
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched-flower=y
+CONFIG_PACKAGE_kmod-scsi-core=y
+CONFIG_PACKAGE_kmod-sit=y
+CONFIG_PACKAGE_kmod-slhc=y
+CONFIG_PACKAGE_kmod-sound-core=y
+CONFIG_PACKAGE_kmod-thermal=y
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_kmod-udptunnel4=y
+CONFIG_PACKAGE_kmod-udptunnel6=y
+CONFIG_PACKAGE_kmod-usb-acm=y
+CONFIG_PACKAGE_kmod-usb-common=y
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb-ehci=y
+CONFIG_PACKAGE_kmod-usb-net=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
+CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
+CONFIG_PACKAGE_kmod-usb-net-ipheth=y
+CONFIG_PACKAGE_kmod-usb-net-kalmia=y
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+CONFIG_PACKAGE_kmod-usb-net-rtl8150=y
+CONFIG_PACKAGE_kmod-usb-net-rtl8152=y
+CONFIG_PACKAGE_kmod-usb-serial=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-wdm=y
+CONFIG_PACKAGE_kmod-usb-xhci-hcd=y
+CONFIG_PACKAGE_kmod-usb-xhci-mtk=y
+CONFIG_PACKAGE_kmod-usb2=y
+CONFIG_PACKAGE_kmod-usb3=y
+CONFIG_PACKAGE_kmod-veth=y
+CONFIG_PACKAGE_kmod-vxlan=y
+CONFIG_PACKAGE_kmod-wireguard=y
+CONFIG_PACKAGE_kmod-zram=y
+
+          EOF
+          make defconfig
+
+
+
+      - name: Bake WiFi and LED config into firmware
+        run: |
+          mkdir -p openwrt/files/etc/uci-defaults
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'uci set wireless.radio0.disabled=0' \
+            'uci set wireless.radio1.disabled=0' \
+            'uci commit wireless' \
+            'wifi up' \
+            'uci -q delete system.wan_red' \
+            'uci -q delete system.wan_green' \
+            'uci set system.wan_red=led' \
+            'uci set system.wan_red.name=WAN_No_Internet' \
+            'uci set system.wan_red.sysfs=red:status' \
+            'uci set system.wan_red.trigger=netdev' \
+            'uci set system.wan_red.dev=wan' \
+            'uci set system.wan_red.mode=link' \
+            'uci set system.wan_red.default=1' \
+            'uci set system.wan_green=led' \
+            'uci set system.wan_green.name=WAN_Internet_OK' \
+            'uci set system.wan_green.sysfs=green:status' \
+            'uci set system.wan_green.trigger=netdev' \
+            'uci set system.wan_green.dev=wan' \
+            'uci set system.wan_green.mode=link' \
+            'uci set system.wan_green.default=0' \
+            'uci commit system' \
+            'rm -f /etc/uci-defaults/99-wifi-led.sh' \
+            'exit 0' \
+            > openwrt/files/etc/uci-defaults/99-wifi-led.sh
+          chmod +x openwrt/files/etc/uci-defaults/99-wifi-led.sh
+
+      - name: Download Sources
+        run: make download -j8 || make download -j1
+
+      - name: Build Firmware
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: JIDU6101-firmware
+          path: |
+            bin/targets/mediatek/filogic/*.bin
+            bin/targets/mediatek/filogic/*.itb
+            bin/targets/mediatek/filogic/sha256sums
+          retention-days: 7
