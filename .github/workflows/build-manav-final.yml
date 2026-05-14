@@ -51,7 +51,7 @@ jobs:
             if [ -f "$FILE" ]; then
               sed -i 's/model = "[^"]*"/model = "JioRouter AX6000 (ManavRajIN Build)"/' "$FILE"
               echo "Patched: $FILE"
-              grep 'model = ' "$FILE"
+              grep 'model = ' "$FILE" || true
             else
               echo "Not found: $FILE"
             fi
