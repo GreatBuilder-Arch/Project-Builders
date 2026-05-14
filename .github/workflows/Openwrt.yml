@@ -1,0 +1,409 @@
+name: OpenWrt Build JIDU6101
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses5-dev \
+            libssl-dev python3-setuptools rsync unzip zlib1g-dev \
+            file wget
+
+      # ── Clone OpenWrt stable v25.12.3 + device files from PR #22201 ──────
+      - name: Clone OpenWrt and apply PR 22201 device files
+        run: |
+          git clone https://github.com/openwrt/openwrt.git openwrt
+          cd openwrt
+          git checkout v25.12.3
+          git fetch origin pull/22201/head:pr22201
+
+          # Copy DTS files
+          git checkout pr22201 -- \
+            target/linux/mediatek/dts/mt7986a-jiorouter-ax6000-jidu6101.dts \
+            target/linux/mediatek/dts/mt7986a-jiorouter-common.dtsi
+
+          # Show what filogic files exist in PR
+          echo "=== Files in PR filogic ==="
+          git show pr22201 --name-only | grep filogic || true
+
+          # Copy all new/changed filogic files from PR
+          git diff v25.12.3..pr22201 --name-only | grep filogic | while read f; do
+            git checkout pr22201 -- "$f" 2>/dev/null && echo "Copied: $f" || true
+          done
+
+          # Verify DTS
+          ls target/linux/mediatek/dts/mt7986a-jiorouter* || \
+            { echo "ERROR: DTS files missing!"; exit 1; }
+
+          # Check profile (warn only, don't fail)
+          grep -r "jiorouter" target/linux/mediatek/filogic/ && \
+            echo "Device profile OK" || \
+            echo "WARNING: Profile not found, defconfig will handle it"
+
+      - name: Update Feeds
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Remove Broken Packages
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds uninstall onionshare-cli || true
+
+      - name: Add Config
+        working-directory: openwrt
+        run: |
+          rm -f .config
+          echo 'CONFIG_TARGET_mediatek=y' >> .config
+          echo 'CONFIG_TARGET_mediatek_filogic=y' >> .config
+          echo 'CONFIG_TARGET_mediatek_filogic_DEVICE_jiorouter_ax6000-jidu6101=y' >> .config
+          echo 'CONFIG_TARGET_ROOTFS_SQUASHFS=y' >> .config
+          echo 'CONFIG_TARGET_ROOTFS_EXT4FS=y' >> .config
+          echo 'CONFIG_PACKAGE_base-files=y' >> .config
+          echo 'CONFIG_PACKAGE_block-mount=y' >> .config
+          echo 'CONFIG_PACKAGE_blockd=y' >> .config
+          echo 'CONFIG_PACKAGE_busybox=y' >> .config
+          echo 'CONFIG_PACKAGE_ca-bundle=y' >> .config
+          echo 'CONFIG_PACKAGE_cgi-io=y' >> .config
+          echo 'CONFIG_PACKAGE_dnsmasq=y' >> .config
+          echo 'CONFIG_PACKAGE_dropbear=y' >> .config
+          echo 'CONFIG_PACKAGE_e2fsprogs=y' >> .config
+          echo 'CONFIG_PACKAGE_eip197-mini-firmware=y' >> .config
+          echo 'CONFIG_PACKAGE_f2fsck=y' >> .config
+          echo 'CONFIG_PACKAGE_firewall4=y' >> .config
+          echo 'CONFIG_PACKAGE_fit-check-sign=y' >> .config
+          echo 'CONFIG_PACKAGE_fitblk=y' >> .config
+          echo 'CONFIG_PACKAGE_fstools=y' >> .config
+          echo 'CONFIG_PACKAGE_fwtool=y' >> .config
+          echo 'CONFIG_PACKAGE_getrandom=y' >> .config
+          echo 'CONFIG_PACKAGE_hostapd-common=y' >> .config
+          echo 'CONFIG_PACKAGE_ip-tiny=y' >> .config
+          echo 'CONFIG_PACKAGE_ip6tables-nft=y' >> .config
+          echo 'CONFIG_PACKAGE_iperf3=y' >> .config
+          echo 'CONFIG_PACKAGE_ipset=y' >> .config
+          echo 'CONFIG_PACKAGE_iptables-mod-conntrack-extra=y' >> .config
+          echo 'CONFIG_PACKAGE_iptables-mod-extra=y' >> .config
+          echo 'CONFIG_PACKAGE_iptables-mod-ipopt=y' >> .config
+          echo 'CONFIG_PACKAGE_iptables-nft=y' >> .config
+          echo 'CONFIG_PACKAGE_iw=y' >> .config
+          echo 'CONFIG_PACKAGE_jansson4=y' >> .config
+          echo 'CONFIG_PACKAGE_jshn=y' >> .config
+          echo 'CONFIG_PACKAGE_jsonfilter=y' >> .config
+          echo 'CONFIG_PACKAGE_logd=y' >> .config
+          echo 'CONFIG_PACKAGE_mkf2fs=y' >> .config
+          echo 'CONFIG_PACKAGE_mount-utils=y' >> .config
+          echo 'CONFIG_PACKAGE_mt7986-wo-firmware=y' >> .config
+          echo 'CONFIG_PACKAGE_mtd=y' >> .config
+          echo 'CONFIG_PACKAGE_mwan3=y' >> .config
+          echo 'CONFIG_PACKAGE_nano=y' >> .config
+          echo 'CONFIG_PACKAGE_netifd=y' >> .config
+          echo 'CONFIG_PACKAGE_nftables-json=y' >> .config
+          echo 'CONFIG_PACKAGE_nlbwmon=y' >> .config
+          echo 'CONFIG_PACKAGE_odhcp6c=y' >> .config
+          echo 'CONFIG_PACKAGE_odhcpd-ipv6only=y' >> .config
+          echo 'CONFIG_PACKAGE_openssl-util=y' >> .config
+          echo 'CONFIG_PACKAGE_openwrt-keyring=y' >> .config
+          echo 'CONFIG_PACKAGE_ppp=y' >> .config
+          echo 'CONFIG_PACKAGE_ppp-mod-pppoe=y' >> .config
+          echo 'CONFIG_PACKAGE_procd=y' >> .config
+          echo 'CONFIG_PACKAGE_procd-seccomp=y' >> .config
+          echo 'CONFIG_PACKAGE_procd-ujail=y' >> .config
+          echo 'CONFIG_PACKAGE_px5g-mbedtls=y' >> .config
+          echo 'CONFIG_PACKAGE_r8152-firmware=y' >> .config
+          echo 'CONFIG_PACKAGE_resolveip=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-file=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-iwinfo=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-luci=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-rpcsys=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-rrdns=y' >> .config
+          echo 'CONFIG_PACKAGE_rpcd-mod-ucode=y' >> .config
+          echo 'CONFIG_PACKAGE_sqm-scripts=y' >> .config
+          echo 'CONFIG_PACKAGE_6in4=y' >> .config
+          echo 'CONFIG_PACKAGE_6rd=y' >> .config
+          echo 'CONFIG_PACKAGE_tc-tiny=y' >> .config
+          echo 'CONFIG_PACKAGE_terminfo=y' >> .config
+          echo 'CONFIG_PACKAGE_ubi-utils=y' >> .config
+          echo 'CONFIG_PACKAGE_uboot-envtools=y' >> .config
+          echo 'CONFIG_PACKAGE_ubox=y' >> .config
+          echo 'CONFIG_PACKAGE_ubus=y' >> .config
+          echo 'CONFIG_PACKAGE_ubusd=y' >> .config
+          echo 'CONFIG_PACKAGE_uci=y' >> .config
+          echo 'CONFIG_PACKAGE_uclient-fetch=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-digest=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-fs=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-html=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-log=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-math=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-nl80211=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-rtnl=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-ubus=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-uci=y' >> .config
+          echo 'CONFIG_PACKAGE_ucode-mod-uloop=y' >> .config
+          echo 'CONFIG_PACKAGE_uhttpd=y' >> .config
+          echo 'CONFIG_PACKAGE_uhttpd-mod-ubus=y' >> .config
+          echo 'CONFIG_PACKAGE_urandom-seed=y' >> .config
+          echo 'CONFIG_PACKAGE_urngd=y' >> .config
+          echo 'CONFIG_PACKAGE_usb-modeswitch=y' >> .config
+          echo 'CONFIG_PACKAGE_uqmi=y' >> .config
+          echo 'CONFIG_PACKAGE_usign=y' >> .config
+          echo 'CONFIG_PACKAGE_vnstat2=y' >> .config
+          echo 'CONFIG_PACKAGE_vnstati2=y' >> .config
+          echo 'CONFIG_PACKAGE_wifi-scripts=y' >> .config
+          echo 'CONFIG_PACKAGE_wireguard-tools=y' >> .config
+          echo 'CONFIG_PACKAGE_wireless-regdb=y' >> .config
+          echo 'CONFIG_PACKAGE_wpad-openssl=y' >> .config
+          echo 'CONFIG_PACKAGE_xtables-nft=y' >> .config
+          echo 'CONFIG_PACKAGE_zlib=y' >> .config
+          echo 'CONFIG_PACKAGE_zram-swap=y' >> .config
+          echo 'CONFIG_PACKAGE_luci=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-firewall=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-mwan3=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-nlbwmon=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-opkg=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-sqm=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-app-vnstat2=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-base=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-lib-chartjs=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-lib-jsonc=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-lib-uqr=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-mod-admin-full=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-mod-network=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-mod-status=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-mod-system=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-proto-ipv6=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-proto-ppp=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-proto-wireguard=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-proto-qmi=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-proto-mbim=y' >> .config
+          echo 'CONFIG_PACKAGE_luci-theme-bootstrap=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-br-netfilter=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-cfg80211=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-acompress=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-aead=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-authenc=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-blake2b=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-ccm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-cmac=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-crc32c=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-ctr=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-des=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-gcm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-geniv=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-gf128=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-ghash=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-hash=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-hmac=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-hw-safexcel=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-kpp=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-lib-curve25519=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-lib-poly1305=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-manager=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-md5=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-null=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-rng=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-seqiv=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-sha1=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-sha256=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-sha3=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-sha512=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-crypto-xxhash=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fs-autofs4=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fs-btrfs=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fs-ext4=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fs-ntfs3=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fou=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-fou6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-geneve=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-gre=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-gre6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-gpio-button-hotplug=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-hwmon-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-i2c-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ifb=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-input-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ip6-tunnel=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ip6tables=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-conntrack=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-conntrack-extra=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-extra=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-ipopt=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-ipset=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-nat=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-nat-extra=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-nat6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ipt-physdev=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-iptunnel=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-iptunnel4=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-iptunnel6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-leds-gpio=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-leds-pwm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ledtrig-gpio=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-crc-ccitt=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-crc16=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-crc32c=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-lz4=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-lz4-decompress=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-lzo=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-raid6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-xor=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-xxhash=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-zlib-deflate=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-zlib-inflate=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-lib-zstd=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-libphy=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mac80211=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-macvlan=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mii=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mpls=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76-connac=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt7603=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76x02-common=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76x2=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt76x2-common=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt7915e=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt7916-firmware=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-mt7986-firmware=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nat46=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-conncount=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-conntrack=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-conntrack6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-flow=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-ipt=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-ipt6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-ipvs=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-log=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-log6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-nat=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-nat6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-reject=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nf-reject6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nfnetlink=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nfnetlink-queue=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-compat=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-fib=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-nat=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-offload=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nft-queue=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nls-base=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-nsh=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-ppp=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-pppoe=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-pppox=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-act-sample=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-act-vlan=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-bpf=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-cake=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-connmark=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sched-flower=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-scsi-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sit=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-slhc=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-sound-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-thermal=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-tun=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-udptunnel4=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-udptunnel6=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-acm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-common=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-core=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-ehci=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-ipheth=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-kalmia=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-rtl8150=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-net-rtl8152=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-serial=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-serial-option=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-serial-wwan=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-storage=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-wdm=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-xhci-hcd=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb-xhci-mtk=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb2=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-usb3=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-veth=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-vxlan=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-wireguard=y' >> .config
+          echo 'CONFIG_PACKAGE_kmod-zram=y' >> .config
+          make defconfig
+
+      - name: Bake WiFi and LED config into firmware
+        run: |
+          mkdir -p openwrt/files/etc/uci-defaults
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'uci set wireless.radio0.disabled=0' \
+            'uci set wireless.radio1.disabled=0' \
+            'uci set wireless.default_radio0.ssid=ManavRajIN-Router' \
+            'uci set wireless.default_radio1.ssid=ManavRajIN-Router' \
+            'uci commit wireless' \
+            'wifi up' \
+            'uci -q delete system.wan_red' \
+            'uci -q delete system.wan_green' \
+            'uci set system.wan_red=led' \
+            'uci set system.wan_red.name=WAN_No_Internet' \
+            'uci set system.wan_red.sysfs=red:status' \
+            'uci set system.wan_red.trigger=netdev' \
+            'uci set system.wan_red.dev=wan' \
+            'uci set system.wan_red.mode=link' \
+            'uci set system.wan_red.default=1' \
+            'uci set system.wan_green=led' \
+            'uci set system.wan_green.name=WAN_Internet_OK' \
+            'uci set system.wan_green.sysfs=green:status' \
+            'uci set system.wan_green.trigger=netdev' \
+            'uci set system.wan_green.dev=wan' \
+            'uci set system.wan_green.mode=link' \
+            'uci set system.wan_green.default=0' \
+            'uci commit system' \
+            'rm -f /etc/uci-defaults/99-wifi-led.sh' \
+            'exit 0' \
+            > openwrt/files/etc/uci-defaults/99-wifi-led.sh
+          chmod +x openwrt/files/etc/uci-defaults/99-wifi-led.sh
+
+      - name: Download Sources
+        working-directory: openwrt
+        run: make download -j8 || make download -j1
+
+      - name: Build Firmware
+        working-directory: openwrt
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: JIDU6101-firmware
+          path: |
+            openwrt/bin/targets/mediatek/filogic/*.bin
+            openwrt/bin/targets/mediatek/filogic/*.itb
+            openwrt/bin/targets/mediatek/filogic/sha256sums
+          retention-days: 7
