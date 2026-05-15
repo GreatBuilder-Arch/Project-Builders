@@ -8,11 +8,7 @@ on:
     branches: [ main ]
 
 env:
-  # Clone directly from the PR author's fork branch — no merge needed
-  PR_REPO: https://github.com/sh3ikh-faisal/openwrt.git
-  PR_BRANCH: jirouter-ax6000
-  # Pinned to the latest reviewed commit on that branch
-  PR_COMMIT: 4f43eeec063b9df896cc8fac12a954881b556130
+  DEVICE_PR: 22201
   TARGET: mediatek
   SUBTARGET: filogic
   PROFILE: jiorouter_ax6000-jidu6101
@@ -40,23 +36,29 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang flex bison g++ gawk \
-            gcc-multilib g++-multilib gettext git libncurses-dev \
-            libssl-dev python3-setuptools rsync swig unzip zlib1g-dev \
-            file wget curl ca-certificates
+            build-essential gcc g++ make libncurses-dev zlib1g-dev gawk \
+            gettext libssl-dev xsltproc zip file subversion jq tar bzip2 \
+            unzip wget git rsync python3 python3-setuptools \
+            gcc-multilib g++-multilib clang flex bison swig ca-certificates
 
       # ------------------------------------------------------------------ #
-      # 3. Clone PR author's fork at the pinned commit
-      #    This branch already has the JIDU6101 device files — no merge needed
+      # 3. Clone OpenWrt master
       # ------------------------------------------------------------------ #
-      - name: Clone OpenWrt fork (PR #22201)
+      - name: Clone OpenWrt (master)
         run: |
-          git clone --depth=1 --branch "$PR_BRANCH" "$PR_REPO" openwrt
-          cd openwrt
-          git checkout "$PR_COMMIT"
+          git clone https://github.com/openwrt/openwrt.git openwrt
 
       # ------------------------------------------------------------------ #
-      # 4. Update feeds
+      # 4. Fetch PR #22201 and checkout
+      # ------------------------------------------------------------------ #
+      - name: Fetch and checkout PR #${{ env.DEVICE_PR }}
+        working-directory: openwrt
+        run: |
+          git fetch origin pull/$DEVICE_PR/head:pr$DEVICE_PR
+          git checkout pr$DEVICE_PR
+
+      # ------------------------------------------------------------------ #
+      # 5. Update feeds
       # ------------------------------------------------------------------ #
       - name: Update & install feeds
         working-directory: openwrt
@@ -65,7 +67,7 @@ jobs:
           ./scripts/feeds install -a
 
       # ------------------------------------------------------------------ #
-      # 5. Write .config
+      # 6. Write .config
       # ------------------------------------------------------------------ #
       - name: Write .config
         working-directory: openwrt
@@ -414,7 +416,7 @@ jobs:
           EOF
 
       # ------------------------------------------------------------------ #
-      # 6. Bake WiFi and LED config into firmware via uci-defaults
+      # 7. Bake WiFi and LED config into firmware via uci-defaults
       # ------------------------------------------------------------------ #
       - name: Bake WiFi and LED config into firmware
         run: |
@@ -448,21 +450,21 @@ jobs:
           chmod +x openwrt/files/etc/uci-defaults/99-wifi-led.sh
 
       # ------------------------------------------------------------------ #
-      # 7. defconfig expansion
+      # 8. defconfig expansion
       # ------------------------------------------------------------------ #
       - name: Expand .config (defconfig)
         working-directory: openwrt
         run: make defconfig
 
       # ------------------------------------------------------------------ #
-      # 8. Download package sources
+      # 9. Download package sources
       # ------------------------------------------------------------------ #
       - name: Download package sources
         working-directory: openwrt
         run: make download -j$(nproc) || make download -j1 V=s
 
       # ------------------------------------------------------------------ #
-      # 9. Compile firmware
+      # 10. Compile firmware
       # ------------------------------------------------------------------ #
       - name: Compile firmware
         working-directory: openwrt
@@ -471,7 +473,7 @@ jobs:
           IGNORE_ERRORS: 1
 
       # ------------------------------------------------------------------ #
-      # 10. List build artifacts
+      # 11. List build artifacts
       # ------------------------------------------------------------------ #
       - name: List build outputs
         run: |
@@ -479,7 +481,7 @@ jobs:
           find openwrt/bin/targets -type f | sort
 
       # ------------------------------------------------------------------ #
-      # 11. Upload artifacts
+      # 12. Upload artifacts
       # ------------------------------------------------------------------ #
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
