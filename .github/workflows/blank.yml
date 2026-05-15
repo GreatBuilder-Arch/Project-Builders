@@ -58,13 +58,31 @@ jobs:
 
       # ------------------------------------------------------------------ #
       # 4. Apply PR #22201 (JIDU6101 device support)
+      #    Strategy: fetch the PR branch, then merge with -X theirs so any
+      #    conflicts in files that already exist in v25.12.3 are resolved by
+      #    taking the PR's version.  This avoids the cherry-pick conflict on
+      #    platform.sh while still pulling in all new device files.
       # ------------------------------------------------------------------ #
       - name: Apply device PR #${{ env.DEVICE_PR }}
         working-directory: openwrt
         run: |
+          # Fetch the PR head into a local branch
           git fetch origin "pull/$DEVICE_PR/head:pr-$DEVICE_PR"
-          git cherry-pick "pr-$DEVICE_PR" \
-            || git cherry-pick --strategy=recursive -X theirs "pr-$DEVICE_PR"
+
+          # Find the common ancestor between our tag and the PR branch so we
+          # can do a targeted patch instead of a full merge.
+          MERGE_BASE=$(git merge-base HEAD pr-$DEVICE_PR)
+
+          # Generate a diff of only the changes introduced by the PR
+          git diff "$MERGE_BASE" "pr-$DEVICE_PR" > /tmp/device_pr.patch
+
+          # Apply the patch; if it fails fall back to a 3-way merge attempt
+          git apply --3way /tmp/device_pr.patch || {
+            echo "::warning::Clean apply failed, trying merge with -X theirs"
+            git merge -X theirs --no-edit \
+              -m "Merge PR #$DEVICE_PR: JioRouter AX6000 JIDU6101 support" \
+              "pr-$DEVICE_PR"
+          }
 
       # ------------------------------------------------------------------ #
       # 5. Update feeds
