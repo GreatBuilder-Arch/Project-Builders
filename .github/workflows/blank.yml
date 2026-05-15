@@ -53,7 +53,7 @@ jobs:
           # Fetch the PR branch from the author's fork and merge,
           # preferring PR changes on any conflict (-X theirs)
           git fetch https://github.com/sh3ikh-faisal/openwrt.git jirouter-ax6000
-          git merge --no-edit -X theirs FETCH_HEAD
+          git merge --no-edit -X theirs --allow-unrelated-histories FETCH_HEAD
           echo "PR #22201 applied successfully"
 
       # ── 5. Cache feeds and tools ──────────────────────────────────────────
