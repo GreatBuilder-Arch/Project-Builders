@@ -8,12 +8,9 @@ on:
     branches: [ main ]
 
 env:
-  # PR that adds JIDU6101 device support
   DEVICE_PR: 22201
-  # Stable tag to build against (latest 25.12 point release)
   OPENWRT_TAG: v25.12.3
   OPENWRT_BRANCH: openwrt-25.12
-  # Target / subtarget / profile
   TARGET: mediatek
   SUBTARGET: filogic
   PROFILE: jiorouter_ax6000-jidu6101
@@ -22,11 +19,10 @@ jobs:
   build:
     name: Build OpenWrt (MediaTek Filogic / JIDU6101)
     runs-on: ubuntu-24.04
-    # Free-tier runners have ~14 GB disk; request extra swap to be safe
     steps:
 
       # ------------------------------------------------------------------ #
-      # 1. Free up disk space on the GitHub-hosted runner
+      # 1. Free up disk space
       # ------------------------------------------------------------------ #
       - name: Free up disk space
         run: |
@@ -48,7 +44,7 @@ jobs:
             file wget curl ca-certificates
 
       # ------------------------------------------------------------------ #
-      # 3. Clone OpenWrt stable branch
+      # 3. Clone OpenWrt at tag v25.12.3
       # ------------------------------------------------------------------ #
       - name: Clone OpenWrt (${{ env.OPENWRT_TAG }})
         run: |
@@ -58,31 +54,40 @@ jobs:
 
       # ------------------------------------------------------------------ #
       # 4. Apply PR #22201 (JIDU6101 device support)
-      #    Strategy: fetch the PR branch, then merge with -X theirs so any
-      #    conflicts in files that already exist in v25.12.3 are resolved by
-      #    taking the PR's version.  This avoids the cherry-pick conflict on
-      #    platform.sh while still pulling in all new device files.
+      #
+      #    git clone --depth=1 on a tag leaves a detached HEAD, so we must
+      #    create a real branch before git-merge will work.
+      #    Strategy:
+      #      a) checkout -b build-branch  (materialise a branch)
+      #      b) build a diff from the PR's merge-base to its tip
+      #      c) try git apply (clean, no merge commit)
+      #      d) on conflict fall back to git merge -X theirs
       # ------------------------------------------------------------------ #
       - name: Apply device PR #${{ env.DEVICE_PR }}
         working-directory: openwrt
         run: |
-          # Fetch the PR head into a local branch
+          # a) Turn detached HEAD into a real branch so merge works
+          git checkout -b build-branch
+
+          # b) Fetch the PR head
           git fetch origin "pull/$DEVICE_PR/head:pr-$DEVICE_PR"
 
-          # Find the common ancestor between our tag and the PR branch so we
-          # can do a targeted patch instead of a full merge.
-          MERGE_BASE=$(git merge-base HEAD pr-$DEVICE_PR)
+          # c) Build a targeted patch (only changes the PR introduces)
+          MERGE_BASE=$(git merge-base build-branch pr-$DEVICE_PR)
+          git diff "$MERGE_BASE" pr-$DEVICE_PR > /tmp/device_pr.patch
 
-          # Generate a diff of only the changes introduced by the PR
-          git diff "$MERGE_BASE" "pr-$DEVICE_PR" > /tmp/device_pr.patch
-
-          # Apply the patch; if it fails fall back to a 3-way merge attempt
-          git apply --3way /tmp/device_pr.patch || {
-            echo "::warning::Clean apply failed, trying merge with -X theirs"
+          # d) Try clean apply first; fall back to merge -X theirs on conflict
+          if git apply --check /tmp/device_pr.patch 2>/dev/null; then
+            echo "Applying PR as clean patch"
+            git apply /tmp/device_pr.patch
+            git add -A
+            git commit -m "Apply PR #$DEVICE_PR: JioRouter AX6000 JIDU6101 support"
+          else
+            echo "::notice::Patch has conflicts — falling back to merge -X theirs"
             git merge -X theirs --no-edit \
               -m "Merge PR #$DEVICE_PR: JioRouter AX6000 JIDU6101 support" \
-              "pr-$DEVICE_PR"
-          }
+              pr-$DEVICE_PR
+          fi
 
       # ------------------------------------------------------------------ #
       # 5. Update feeds
@@ -450,13 +455,10 @@ jobs:
           mkdir -p openwrt/files/etc/uci-defaults
           cat > openwrt/files/etc/uci-defaults/99-wifi-led.sh << 'SCRIPT'
           #!/bin/sh
-          # Enable both radios
           uci set wireless.radio0.disabled=0
           uci set wireless.radio1.disabled=0
           uci commit wireless
           wifi up
-
-          # WAN LED: red = no internet
           uci -q delete system.wan_red
           uci set system.wan_red=led
           uci set system.wan_red.name='WAN_No_Internet'
@@ -465,8 +467,6 @@ jobs:
           uci set system.wan_red.dev='wan'
           uci set system.wan_red.mode='link'
           uci set system.wan_red.default='1'
-
-          # WAN LED: green = internet OK
           uci -q delete system.wan_green
           uci set system.wan_green=led
           uci set system.wan_green.name='WAN_Internet_OK'
@@ -475,10 +475,7 @@ jobs:
           uci set system.wan_green.dev='wan'
           uci set system.wan_green.mode='link'
           uci set system.wan_green.default='0'
-
           uci commit system
-
-          # Self-delete after first run
           rm -f /etc/uci-defaults/99-wifi-led.sh
           exit 0
           SCRIPT
@@ -492,7 +489,7 @@ jobs:
         run: make defconfig
 
       # ------------------------------------------------------------------ #
-      # 9. Download source tarballs (parallel, tolerant of transient errors)
+      # 9. Download package sources
       # ------------------------------------------------------------------ #
       - name: Download package sources
         working-directory: openwrt
@@ -506,7 +503,6 @@ jobs:
         run: |
           make -j$(nproc) || make -j1 V=s
         env:
-          # Treat warnings-as-errors sometimes breaks OOT patches; relax here
           IGNORE_ERRORS: 1
 
       # ------------------------------------------------------------------ #
