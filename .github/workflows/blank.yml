@@ -50,14 +50,10 @@ jobs:
         run: |
           git config user.email "ci@github.com"
           git config user.name "GitHub Actions"
-          # Fetch the PR branch from the author's fork
+          # Fetch the PR branch from the author's fork and merge,
+          # preferring PR changes on any conflict (-X theirs)
           git fetch https://github.com/sh3ikh-faisal/openwrt.git jirouter-ax6000
-          git cherry-pick FETCH_HEAD || {
-            echo "Cherry-pick failed — attempting merge..."
-            git cherry-pick --abort 2>/dev/null || true
-            git fetch origin pull/22201/head:pr-22201
-            git merge --no-edit pr-22201
-          }
+          git merge --no-edit -X theirs FETCH_HEAD
           echo "PR #22201 applied successfully"
 
       # ── 5. Cache feeds and tools ──────────────────────────────────────────
