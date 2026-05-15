@@ -8,9 +8,11 @@ on:
     branches: [ main ]
 
 env:
-  DEVICE_PR: 22201
-  OPENWRT_TAG: v25.12.3
-  OPENWRT_BRANCH: openwrt-25.12
+  # Clone directly from the PR author's fork branch — no merge needed
+  PR_REPO: https://github.com/sh3ikh-faisal/openwrt.git
+  PR_BRANCH: jirouter-ax6000
+  # Pinned to the latest reviewed commit on that branch
+  PR_COMMIT: 4f43eeec063b9df896cc8fac12a954881b556130
   TARGET: mediatek
   SUBTARGET: filogic
   PROFILE: jiorouter_ax6000-jidu6101
@@ -44,53 +46,17 @@ jobs:
             file wget curl ca-certificates
 
       # ------------------------------------------------------------------ #
-      # 3. Clone OpenWrt at tag v25.12.3
+      # 3. Clone PR author's fork at the pinned commit
+      #    This branch already has the JIDU6101 device files — no merge needed
       # ------------------------------------------------------------------ #
-      - name: Clone OpenWrt (${{ env.OPENWRT_TAG }})
+      - name: Clone OpenWrt fork (PR #22201)
         run: |
-          git clone --depth=1 \
-            --branch "$OPENWRT_TAG" \
-            https://github.com/openwrt/openwrt.git openwrt
+          git clone --depth=1 --branch "$PR_BRANCH" "$PR_REPO" openwrt
+          cd openwrt
+          git checkout "$PR_COMMIT"
 
       # ------------------------------------------------------------------ #
-      # 4. Apply PR #22201 (JIDU6101 device support)
-      #
-      #    git clone --depth=1 on a tag leaves a detached HEAD, so we must
-      #    create a real branch before git-merge will work.
-      #    Strategy:
-      #      a) checkout -b build-branch  (materialise a branch)
-      #      b) build a diff from the PR's merge-base to its tip
-      #      c) try git apply (clean, no merge commit)
-      #      d) on conflict fall back to git merge -X theirs
-      # ------------------------------------------------------------------ #
-      - name: Apply device PR #${{ env.DEVICE_PR }}
-        working-directory: openwrt
-        run: |
-          # a) Turn detached HEAD into a real branch so merge works
-          git checkout -b build-branch
-
-          # b) Fetch the PR head
-          git fetch origin "pull/$DEVICE_PR/head:pr-$DEVICE_PR"
-
-          # c) Build a targeted patch (only changes the PR introduces)
-          MERGE_BASE=$(git merge-base build-branch pr-$DEVICE_PR)
-          git diff "$MERGE_BASE" pr-$DEVICE_PR > /tmp/device_pr.patch
-
-          # d) Try clean apply first; fall back to merge -X theirs on conflict
-          if git apply --check /tmp/device_pr.patch 2>/dev/null; then
-            echo "Applying PR as clean patch"
-            git apply /tmp/device_pr.patch
-            git add -A
-            git commit -m "Apply PR #$DEVICE_PR: JioRouter AX6000 JIDU6101 support"
-          else
-            echo "::notice::Patch has conflicts — falling back to merge -X theirs"
-            git merge -X theirs --no-edit \
-              -m "Merge PR #$DEVICE_PR: JioRouter AX6000 JIDU6101 support" \
-              pr-$DEVICE_PR
-          fi
-
-      # ------------------------------------------------------------------ #
-      # 5. Update feeds
+      # 4. Update feeds
       # ------------------------------------------------------------------ #
       - name: Update & install feeds
         working-directory: openwrt
@@ -99,7 +65,7 @@ jobs:
           ./scripts/feeds install -a
 
       # ------------------------------------------------------------------ #
-      # 6. Write .config
+      # 5. Write .config
       # ------------------------------------------------------------------ #
       - name: Write .config
         working-directory: openwrt
@@ -448,7 +414,7 @@ jobs:
           EOF
 
       # ------------------------------------------------------------------ #
-      # 7. Bake WiFi and LED config into firmware via uci-defaults
+      # 6. Bake WiFi and LED config into firmware via uci-defaults
       # ------------------------------------------------------------------ #
       - name: Bake WiFi and LED config into firmware
         run: |
@@ -482,31 +448,30 @@ jobs:
           chmod +x openwrt/files/etc/uci-defaults/99-wifi-led.sh
 
       # ------------------------------------------------------------------ #
-      # 8. defconfig expansion
+      # 7. defconfig expansion
       # ------------------------------------------------------------------ #
       - name: Expand .config (defconfig)
         working-directory: openwrt
         run: make defconfig
 
       # ------------------------------------------------------------------ #
-      # 9. Download package sources
+      # 8. Download package sources
       # ------------------------------------------------------------------ #
       - name: Download package sources
         working-directory: openwrt
         run: make download -j$(nproc) || make download -j1 V=s
 
       # ------------------------------------------------------------------ #
-      # 10. Compile firmware
+      # 9. Compile firmware
       # ------------------------------------------------------------------ #
       - name: Compile firmware
         working-directory: openwrt
-        run: |
-          make -j$(nproc) || make -j1 V=s
+        run: make -j$(nproc) || make -j1 V=s
         env:
           IGNORE_ERRORS: 1
 
       # ------------------------------------------------------------------ #
-      # 11. List build artifacts
+      # 10. List build artifacts
       # ------------------------------------------------------------------ #
       - name: List build outputs
         run: |
@@ -514,7 +479,7 @@ jobs:
           find openwrt/bin/targets -type f | sort
 
       # ------------------------------------------------------------------ #
-      # 12. Upload artifacts
+      # 11. Upload artifacts
       # ------------------------------------------------------------------ #
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
