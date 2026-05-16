@@ -431,13 +431,21 @@ jobs:
         working-directory: openwrt
         run: make defconfig
 
-      # ── 9. Download sources (parallel) ────────────────────────────────────
+      # ── 9. Remove incompatible patches ──────────────────────────────────────
+      - name: Remove incompatible patches
+        working-directory: openwrt
+        run: |
+          # Patch 900-overridable-pc-exec-prefix fails against zlib 1.3.2 (hunk mismatch)
+          rm -f tools/zlib/patches/900-overridable-pc-exec-prefix.patch
+          echo "Removed incompatible zlib patch"
+
+      # ── 10. Download sources (parallel) ──────────────────────────────────────
       - name: Download package sources
         working-directory: openwrt
         run: |
           make download -j$(nproc) || make download -j1 V=s
 
-      # ── 10. Build toolchain + firmware ────────────────────────────────────
+      # ── 11. Build toolchain + firmware ────────────────────────────────────
       - name: Build firmware
         working-directory: openwrt
         run: |
@@ -447,7 +455,7 @@ jobs:
             exit 1
           }
 
-      # ── 11. Collect output files ───────────────────────────────────────────
+      # ── 12. Collect output files ───────────────────────────────────────────
       - name: Collect firmware artifacts
         run: |
           mkdir -p artifacts
@@ -457,7 +465,7 @@ jobs:
           echo "--- Built files ---"
           ls -lh artifacts/
 
-      # ── 12. Upload as GitHub artifact ─────────────────────────────────────
+      # ── 13. Upload as GitHub artifact ─────────────────────────────────────
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
@@ -465,7 +473,7 @@ jobs:
           path: artifacts/
           retention-days: 30
 
-      # ── 13. (Optional) Create GitHub Release on tag push ──────────────────
+      # ── 14. (Optional) Create GitHub Release on tag push ──────────────────
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
